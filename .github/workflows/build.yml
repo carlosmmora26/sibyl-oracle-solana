@@ -8,27 +8,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    env:
+      SOLANA_PATH: /home/runner/solana-release/bin
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Rust
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source "$HOME/.cargo/env"
           
-      - name: Install Solana (direct download)
+      - name: Install Solana
         run: |
           wget -q https://github.com/solana-labs/solana/releases/download/v1.18.20/solana-release-x86_64-unknown-linux-gnu.tar.bz2
-          tar -xjf solana-release-x86_64-unknown-linux-gnu.tar.bz2
-          export PATH="$PWD/solana-release/bin:$PATH"
-          solana --version
-          echo "PATH=$PWD/solana-release/bin:$PATH" >> $GITHUB_ENV
+          tar -xjf solana-release-x86_64-unknown-linux-gnu.tar.bz2 -C /home/runner
+          echo "$SOLANA_PATH" >> $GITHUB_PATH
+          /home/runner/solana-release/bin/solana --version
           
-      - name: Install Anchor and cargo-build-bpf
+      - name: Install Anchor
         run: |
           source "$HOME/.cargo/env"
           cargo install --git https://github.com/coral-xyz/anchor anchor-cli --locked
-          cargo install --version 0.25.0 cargo-build-sbf
           
       - name: Build Program
         run: |
