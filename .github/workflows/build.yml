@@ -24,10 +24,11 @@ jobs:
           solana --version
           echo "PATH=$PWD/solana-release/bin:$PATH" >> $GITHUB_ENV
           
-      - name: Install Anchor
+      - name: Install Anchor and cargo-build-bpf
         run: |
           source "$HOME/.cargo/env"
           cargo install --git https://github.com/coral-xyz/anchor anchor-cli --locked
+          cargo install --version 0.25.0 cargo-build-sbf
           
       - name: Build Program
         run: |
