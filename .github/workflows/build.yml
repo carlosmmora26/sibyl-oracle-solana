@@ -8,16 +8,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    container:
-      image: projectserum/build:v0.30.1
     steps:
       - uses: actions/checkout@v4
       
+      - name: Setup Anchor
+        uses: coral-xyz/setup-anchor@v2
+        with:
+          anchor-version: '0.30.1'
+          solana-version: '1.18.20'
+          
       - name: Build
         run: |
-          rm -f Cargo.lock
-          solana --version
-          anchor --version
           anchor build
           ls -la target/deploy/
           
