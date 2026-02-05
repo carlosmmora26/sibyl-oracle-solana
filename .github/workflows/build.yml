@@ -13,8 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Build
+      - name: Setup and Build
         run: |
+          rustup default stable
           solana --version
           anchor --version
           anchor build
