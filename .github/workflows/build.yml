@@ -9,13 +9,13 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     container:
-      image: backpackapp/build:v0.30.1
+      image: projectserum/build:v0.30.1
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup and Build
+      - name: Build
         run: |
-          rustup default stable
+          rm -f Cargo.lock
           solana --version
           anchor --version
           anchor build
