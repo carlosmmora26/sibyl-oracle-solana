@@ -17,7 +17,7 @@ jobs:
           toolchain: stable
           
       - name: Install Solana
-        uses: metaDAOproject/setup-solana@v1
+        uses: metaDAOproject/setup-solana@v1.2
         with:
           solana-version: 1.18.20
           
