@@ -17,9 +17,9 @@ jobs:
           toolchain: stable
           
       - name: Install Solana
-        uses: solana-labs/setup-solana@v1
+        uses: metaDAOproject/setup-solana@v1
         with:
-          version: 1.18.20
+          solana-version: 1.18.20
           
       - name: Install Anchor
         run: |
