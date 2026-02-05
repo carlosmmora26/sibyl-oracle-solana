@@ -38,7 +38,7 @@ try {
     // Replace placeholders
     let envContent = envExample
         .replace('your_base58_encoded_private_key_here', privateKey)
-        .replace('sk-your-deepseek-api-key-here', process.env.DEEPSEEK_API_KEY || 'sk-5b077f28a1a148989d33cda48e948274');
+        .replace('sk-your-deepseek-api-key-here', process.env.DEEPSEEK_API_KEY || 'sk-your-deepseek-api-key-here');
     
     // Write .env
     fs.writeFileSync(envPath, envContent);
