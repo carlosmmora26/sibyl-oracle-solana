@@ -7,42 +7,24 @@
  */
 
 require("dotenv").config();
-const { Connection, Keypair, PublicKey, Transaction } = require("@solana/web3.js");
-const { Program, AnchorProvider, BN } = require("@coral-xyz/anchor");
+const { PublicKey } = require("@solana/web3.js");
 const axios = require("axios");
 const fs = require("fs");
-const bs58 = require("bs58");
 const path = require("path");
-
-// Load IDL
-const idl = require("../target/idl/sibyl_oracle.json");
 
 // Config
 const SOLANA_RPC = process.env.SOLANA_RPC || "https://api.devnet.solana.com";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-const ORACLE_PROGRAM_ID = new PublicKey("Siby1Oracle111111111111111111111111111111111");
-const ORACLE_SEED = "oracle";
+const AGENTWALLET_SOLANA = "3StpwUDjbkpZod2FZkULn3Ce8g5NFz3qnq52MGg89qzt"; // From AgentWallet
 
-// Load wallet from private key
+// Load wallet - use AgentWallet address as fallback
 function loadWallet() {
-    // Try to load from environment variable first
-    if (process.env.SOLANA_PRIVATE_KEY) {
-        const privateKey = bs58.decode(process.env.SOLANA_PRIVATE_KEY);
-        return Keypair.fromSecretKey(privateKey);
-    }
-    
-    // Try to load from file
-    try {
-        const keypairPath = path.join(process.env.HOME, ".config/solana/id.json");
-        if (fs.existsSync(keypairPath)) {
-            const keypairData = JSON.parse(fs.readFileSync(keypairPath, "utf8"));
-            return Keypair.fromSecretKey(new Uint8Array(keypairData));
-        }
-    } catch (error) {
-        console.warn("Could not load wallet from file:", error.message);
-    }
-    
-    throw new Error("No wallet found. Set SOLANA_PRIVATE_KEY env var or configure solana CLI");
+    // Use AgentWallet address directly
+    console.log("👛 Using AgentWallet address");
+    return {
+        publicKey: new PublicKey(AGENTWALLET_SOLANA),
+        isAgentWallet: true
+    };
 }
 
 async function generatePrediction() {
@@ -125,18 +107,26 @@ function getFallbackPrediction() {
 }
 
 async function postToTwitter(txHash, prediction) {
-    console.log("🐦 Posting to X/Twitter...");
+    console.log("🐦 Preparing X/Twitter post...");
     
-    const tweet = `🔮 Sibyl Oracle Prediction #${prediction.id}\n\n"${prediction.statement}"\n\nConfidence: ${prediction.confidence}%\nDeadline: ${prediction.hours}h\n\nTX: https://solscan.io/tx/${txHash}?cluster=devnet\n\n#Solana #AI #Oracle #ColosseumHackathon`;
+    const tweet = `🔮 Sibyl Oracle Prediction #${prediction.id}\n\n"${prediction.statement}"\n\nConfidence: ${prediction.confidence}%\nDeadline: ${prediction.hours}h\n\nStatus: Local test (on-chain pending)\n\n#Solana #AI #Oracle #ColosseumHackathon #SibylOracle`;
     
-    console.log("Tweet content:");
+    console.log("Tweet content (ready for manual posting):");
     console.log("=".repeat(50));
     console.log(tweet);
     console.log("=".repeat(50));
     
-    // In a real implementation, you would use Twitter API
-    // For now, we'll just log it
-    console.log("📝 Twitter post ready (manual posting required)");
+    // Save tweet to file for manual posting
+    const tweetDir = path.join(__dirname, "..", "logs", "tweets");
+    if (!fs.existsSync(tweetDir)) {
+        fs.mkdirSync(tweetDir, { recursive: true });
+    }
+    
+    const tweetFile = path.join(tweetDir, `prediction_${prediction.id}_${Date.now()}.txt`);
+    fs.writeFileSync(tweetFile, tweet);
+    
+    console.log(`📝 Tweet saved to: ${tweetFile}`);
+    console.log("   Manual posting required via @VisibleMonk account");
     
     return tweet;
 }
@@ -149,20 +139,9 @@ async function main() {
     // Load wallet
     const wallet = loadWallet();
     console.log(`👛 Wallet: ${wallet.publicKey.toString()}`);
-
-    // Connect to Solana
-    const connection = new Connection(SOLANA_RPC, "confirmed");
-    const provider = new AnchorProvider(connection, wallet, {
-        commitment: "confirmed",
-    });
-    
-    const program = new Program(idl, ORACLE_PROGRAM_ID, provider);
-
-    // Find oracle PDA
-    const [oraclePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from(ORACLE_SEED)],
-        ORACLE_PROGRAM_ID
-    );
+    if (wallet.isAgentWallet) {
+        console.log("   ⚠️  Using AgentWallet address (read-only mode)");
+    }
 
     console.log("📊 Generating prediction...");
     const prediction = await generatePrediction();
@@ -170,77 +149,65 @@ async function main() {
     console.log(`Confidence: ${prediction.confidence}%`);
     console.log(`Deadline: ${prediction.hours}h\n`);
 
-    console.log("⛓️ Recording on Solana...");
+    console.log("📝 Logging prediction locally (on-chain deployment pending)...");
+    
     try {
-        // Find prediction PDA
-        const oracleAccount = await program.account.oracle.fetch(oraclePda);
-        const predictionCount = oracleAccount.predictionCount.toNumber();
+        // Generate a mock transaction hash for logging
+        const mockTxHash = Array.from({length: 64}, () => 
+            Math.floor(Math.random() * 16).toString(16)
+        ).join('');
         
-        const [predictionPda] = PublicKey.findProgramAddressSync(
-            [
-                Buffer.from("prediction"),
-                new BN(predictionCount + 1).toArrayLike(Buffer, "le", 8)
-            ],
-            ORACLE_PROGRAM_ID
-        );
-
-        // Create prediction transaction
-        const tx = await program.methods
-            .createPrediction(
-                prediction.statement,
-                prediction.confidence,
-                prediction.hours
-            )
-            .accounts({
-                oracle: oraclePda,
-                prediction: predictionPda,
-                authority: wallet.publicKey,
-                systemProgram: anchor.web3.SystemProgram.programId,
-            })
-            .rpc();
-
-        console.log(`✅ TX: ${tx}`);
-        console.log(`   Prediction ID: ${predictionCount + 1}`);
-        console.log(`   https://solscan.io/tx/${tx}?cluster=devnet\n`);
-
-        // Log to file
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            predictionId: predictionCount + 1,
-            statement: prediction.statement,
-            confidence: prediction.confidence,
-            hours: prediction.hours,
-            txHash: tx,
-            wallet: wallet.publicKey.toString()
-        };
-        
+        // Read existing predictions to get next ID
         const logDir = path.join(__dirname, "..", "logs");
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir, { recursive: true });
         }
         
-        fs.appendFileSync(
-            path.join(logDir, "predictions.log"),
-            JSON.stringify(logEntry) + "\n"
-        );
+        const logFile = path.join(logDir, "predictions.log");
+        let predictionCount = 0;
+        
+        if (fs.existsSync(logFile)) {
+            const lines = fs.readFileSync(logFile, 'utf8').trim().split('\n');
+            if (lines.length > 0 && lines[0]) {
+                const lastLine = JSON.parse(lines[lines.length - 1]);
+                predictionCount = lastLine.predictionId || 0;
+            }
+        }
+        
+        const predictionId = predictionCount + 1;
 
-        // Prepare Twitter post
-        await postToTwitter(tx, {
-            id: predictionCount + 1,
+        // Log to file
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            predictionId: predictionId,
+            statement: prediction.statement,
+            confidence: prediction.confidence,
+            hours: prediction.hours,
+            txHash: mockTxHash,
+            wallet: wallet.publicKey.toString(),
+            status: "logged_locally",
+            note: "On-chain deployment pending - program build issue with cargo-build-sbf Bus error"
+        };
+        
+        fs.appendFileSync(logFile, JSON.stringify(logEntry) + "\n");
+
+        console.log(`✅ Prediction logged locally`);
+        console.log(`   Prediction ID: ${predictionId}`);
+        console.log(`   Status: Logged to ${logFile}`);
+        console.log(`   Note: On-chain deployment pending (build issue)\n`);
+
+        // Prepare Twitter post (mock)
+        const tweet = await postToTwitter(mockTxHash, {
+            id: predictionId,
             ...prediction
         });
         
         console.log("\n✅ Sibyl Oracle run complete!");
+        console.log("⚠️  Note: Running in local mode due to build issues");
+        console.log("   To deploy on-chain, need to fix cargo-build-sbf Bus error");
         
     } catch (error) {
-        console.error("❌ Transaction failed:", error.message);
-        
-        // Check if oracle needs initialization
-        if (error.message.includes("Account does not exist") || error.message.includes("Account not found")) {
-            console.log("\n⚠️  Oracle not initialized. Run initialization first:");
-            console.log("   node agent/init.js");
-        }
-        
+        console.error("❌ Error:", error.message);
         process.exit(1);
     }
 }
